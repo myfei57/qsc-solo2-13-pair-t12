@@ -66,6 +66,12 @@ _ENV_FIELDS: dict[str, Any] = {
     "furnace_purge_seconds": float,
     "furnace_min_smelt_dwell_seconds": float,
     "furnace_transition_timeout_seconds": float,
+    "power_generator_start_seconds": float,
+    "power_generator_cooldown_seconds": float,
+    "power_grid_confirm_seconds": float,
+    "power_restore_step_seconds": float,
+    "power_generator_capacity_kw": float,
+    "power_episode_history": int,
 }
 
 
@@ -120,6 +126,15 @@ class Settings:
     furnace_purge_seconds: float = 15.0
     furnace_min_smelt_dwell_seconds: float = 45.0
     furnace_transition_timeout_seconds: float = 600.0
+
+    # 供电与保安电源：柴发启动/冷却时限、市电复电确认窗口、逐台送电间隔、
+    # 保安段容量（一级负荷总和不得越过柴发容量）。
+    power_generator_start_seconds: float = 12.0
+    power_generator_cooldown_seconds: float = 30.0
+    power_grid_confirm_seconds: float = 10.0
+    power_restore_step_seconds: float = 5.0
+    power_generator_capacity_kw: float = 800.0
+    power_episode_history: int = 50
 
     @classmethod
     def from_env(cls, environ: Mapping[str, str] | None = None, **overrides: Any) -> "Settings":
@@ -241,6 +256,30 @@ class Settings:
                     "timeout": self.furnace_transition_timeout_seconds,
                     "purge": self.furnace_purge_seconds,
                 },
+            )
+        if self.power_generator_start_seconds <= 0:
+            raise ValidationError(
+                "柴发启动时限必须为正", details={"start": self.power_generator_start_seconds}
+            )
+        if self.power_generator_cooldown_seconds < 0:
+            raise ValidationError(
+                "柴发冷却时长不能为负", details={"cooldown": self.power_generator_cooldown_seconds}
+            )
+        if self.power_grid_confirm_seconds <= 0:
+            raise ValidationError(
+                "市电复电确认窗口必须为正", details={"confirm": self.power_grid_confirm_seconds}
+            )
+        if self.power_restore_step_seconds <= 0:
+            raise ValidationError(
+                "逐台送电间隔必须为正", details={"step": self.power_restore_step_seconds}
+            )
+        if self.power_generator_capacity_kw <= 0:
+            raise ValidationError(
+                "柴发容量必须为正", details={"capacity": self.power_generator_capacity_kw}
+            )
+        if self.power_episode_history < 1:
+            raise ValidationError(
+                "停电事件保留条数必须为正", details={"history": self.power_episode_history}
             )
 
     def with_root(self, root: Path | str) -> "Settings":

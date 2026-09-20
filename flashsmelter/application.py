@@ -20,6 +20,7 @@ from .matte import MatteTap
 from .ns import Namespace
 from .oxygen import OxygenSystem
 from .params import Params
+from .power import PowerSupply
 from .runtime import Clock, Generation, Metrics, RuntimeContext
 from .settler import Settler
 from .slag import SlagTap
@@ -81,6 +82,7 @@ class Application:
         self.slag.bind_matte(self.matte)
         self.matte.bind_converter(self.conv)
         self.oxygen.bind_feed_port(self.conc)
+        self.power = PowerSupply(ctx)
         self.components: tuple[Component, ...] = (
             self.furnace,
             self.burner,
@@ -91,6 +93,7 @@ class Application:
             self.matte,
             self.conv,
             self.waste,
+            self.power,
         )
         self._by_name: dict[str, Component] = {component.name: component for component in self.components}
 
@@ -516,6 +519,88 @@ class Application:
                 drum_level=params.number("drum_level", minimum=0.0, maximum=1.0),
                 exhaust_temp_c=params.number("exhaust_temp_c", minimum=0.0),
                 tube_leak=params.boolean("tube_leak", required=False, default=False),
+                correlation_id=params.optional_text("correlation_id"),
+                expected_generation=params.optional_number("expected_generation"),
+            )
+
+        @register("power.register_load")
+        def _power_register_load(params: Params) -> Mapping[str, Any]:
+            return self.power.register_load(
+                params.text("actor", required=False, default="control-room"),
+                load_id=params.text("load_id"),
+                label=params.text("label"),
+                tier=params.integer("tier", minimum=1, maximum=3),
+                rated_kw=params.number("rated_kw", minimum=0.0),
+                restore_order=params.integer("restore_order", minimum=0),
+                correlation_id=params.optional_text("correlation_id"),
+                expected_generation=params.optional_number("expected_generation"),
+            )
+
+        @register("power.unregister_load")
+        def _power_unregister_load(params: Params) -> Mapping[str, Any]:
+            return self.power.unregister_load(
+                params.text("actor", required=False, default="control-room"),
+                load_id=params.text("load_id"),
+                correlation_id=params.optional_text("correlation_id"),
+                expected_generation=params.optional_number("expected_generation"),
+            )
+
+        @register("power.grid_loss")
+        def _power_grid_loss(params: Params) -> Mapping[str, Any]:
+            return self.power.grid_loss(
+                params.text("actor", required=False, default="control-room"),
+                cause=params.optional_text("cause"),
+                correlation_id=params.optional_text("correlation_id"),
+                expected_generation=params.optional_number("expected_generation"),
+            )
+
+        @register("power.generator_running")
+        def _power_generator_running(params: Params) -> Mapping[str, Any]:
+            return self.power.generator_running(
+                params.text("actor", required=False, default="control-room"),
+                correlation_id=params.optional_text("correlation_id"),
+                expected_generation=params.optional_number("expected_generation"),
+            )
+
+        @register("power.grid_restored")
+        def _power_grid_restored(params: Params) -> Mapping[str, Any]:
+            return self.power.grid_restored(
+                params.text("actor", required=False, default="control-room"),
+                correlation_id=params.optional_text("correlation_id"),
+                expected_generation=params.optional_number("expected_generation"),
+            )
+
+        @register("power.restore_next")
+        def _power_restore_next(params: Params) -> Mapping[str, Any]:
+            return self.power.restore_next(
+                params.text("actor", required=False, default="control-room"),
+                correlation_id=params.optional_text("correlation_id"),
+                expected_generation=params.optional_number("expected_generation"),
+            )
+
+        @register("power.generator_standby")
+        def _power_generator_standby(params: Params) -> Mapping[str, Any]:
+            return self.power.generator_standby(
+                params.text("actor", required=False, default="control-room"),
+                correlation_id=params.optional_text("correlation_id"),
+                expected_generation=params.optional_number("expected_generation"),
+            )
+
+        @register("power.shed_load")
+        def _power_shed_load(params: Params) -> Mapping[str, Any]:
+            return self.power.shed_load(
+                params.text("actor", required=False, default="control-room"),
+                load_id=params.text("load_id"),
+                reason=params.text("reason"),
+                correlation_id=params.optional_text("correlation_id"),
+                expected_generation=params.optional_number("expected_generation"),
+            )
+
+        @register("power.restore_load")
+        def _power_restore_load(params: Params) -> Mapping[str, Any]:
+            return self.power.restore_load(
+                params.text("actor", required=False, default="control-room"),
+                load_id=params.text("load_id"),
                 correlation_id=params.optional_text("correlation_id"),
                 expected_generation=params.optional_number("expected_generation"),
             )
