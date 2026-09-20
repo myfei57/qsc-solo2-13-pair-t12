@@ -66,6 +66,16 @@ _ENV_FIELDS: dict[str, Any] = {
     "furnace_purge_seconds": float,
     "furnace_min_smelt_dwell_seconds": float,
     "furnace_transition_timeout_seconds": float,
+    "power_voltage_sag_pu": float,
+    "power_voltage_return_pu": float,
+    "power_voltage_lost_pu": float,
+    "power_sag_to_blackout_seconds": float,
+    "power_sag_group_delay_seconds": float,
+    "power_genset_start_seconds": float,
+    "power_genset_capacity_kw": float,
+    "power_genset_retry_cooldown_seconds": float,
+    "power_grid_return_confirm_seconds": float,
+    "power_restore_step_seconds": float,
 }
 
 
@@ -120,6 +130,27 @@ class Settings:
     furnace_purge_seconds: float = 15.0
     furnace_min_smelt_dwell_seconds: float = 45.0
     furnace_transition_timeout_seconds: float = 600.0
+
+    # 供电与保安电源：电压判据（标幺值）、晃电升级时长、发电机与复电节拍。
+    # voltage_lost 为失电（接近零压）判据，sag 为晃电下限，voltage_return 为
+    # 电网真正恢复（需持续确认）；三者必须满足 lost < sag < return < 1。
+    power_voltage_sag_pu: float = 0.85
+    power_voltage_return_pu: float = 0.90
+    power_voltage_lost_pu: float = 0.10
+    # 晃电超过此时长仍未恢复即按停电处理。
+    power_sag_to_blackout_seconds: float = 5.0
+    # 晃电恢复后，自启动批次之间的最小间隔（第 n 批在 (n-1)*delay 后自启动）。
+    power_sag_group_delay_seconds: float = 3.0
+    # 柴油发电机自启动至可带负荷（含 ATS 投合）的耗时。
+    power_genset_start_seconds: float = 15.0
+    # 保安母线可用容量，必须大于全部发电机保安负荷之和。
+    power_genset_capacity_kw: float = 400.0
+    # 发电机启动失败后，无故障信号再次允许自启动的冷却时间。
+    power_genset_retry_cooldown_seconds: float = 30.0
+    # 复电时电网电压必须持续稳定多久才允许切回市电。
+    power_grid_return_confirm_seconds: float = 30.0
+    # 顺序复电时每台设备之间的最小送电间隔。
+    power_restore_step_seconds: float = 2.0
 
     @classmethod
     def from_env(cls, environ: Mapping[str, str] | None = None, **overrides: Any) -> "Settings":
@@ -242,6 +273,36 @@ class Settings:
                     "purge": self.furnace_purge_seconds,
                 },
             )
+        if not 0 <= self.power_voltage_lost_pu < self.power_voltage_sag_pu < self.power_voltage_return_pu < 1:
+            raise ValidationError(
+                "供电电压判据必须满足 0 <= lost < sag < return < 1",
+                details={
+                    "lost": self.power_voltage_lost_pu,
+                    "sag": self.power_voltage_sag_pu,
+                    "return": self.power_voltage_return_pu,
+                },
+            )
+        if self.power_sag_to_blackout_seconds <= 0:
+            raise ValidationError("晃电升级时长必须为正",
+                                  details={"seconds": self.power_sag_to_blackout_seconds})
+        if self.power_sag_group_delay_seconds <= 0:
+            raise ValidationError("晃电自启动批次间隔必须为正",
+                                  details={"seconds": self.power_sag_group_delay_seconds})
+        if self.power_genset_start_seconds <= 0:
+            raise ValidationError("发电机自启动耗时必须为正",
+                                  details={"seconds": self.power_genset_start_seconds})
+        if self.power_genset_capacity_kw <= 0:
+            raise ValidationError("发电机保安母线容量必须为正",
+                                  details={"capacity_kw": self.power_genset_capacity_kw})
+        if self.power_genset_retry_cooldown_seconds < 0:
+            raise ValidationError("发电机重试冷却时长不能为负",
+                                  details={"seconds": self.power_genset_retry_cooldown_seconds})
+        if self.power_grid_return_confirm_seconds <= 0:
+            raise ValidationError("复电确认时长必须为正",
+                                  details={"seconds": self.power_grid_return_confirm_seconds})
+        if self.power_restore_step_seconds <= 0:
+            raise ValidationError("顺序复电间隔必须为正",
+                                  details={"seconds": self.power_restore_step_seconds})
 
     def with_root(self, root: Path | str) -> "Settings":
         updated = replace(self, root=Path(root))

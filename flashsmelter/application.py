@@ -20,6 +20,7 @@ from .matte import MatteTap
 from .ns import Namespace
 from .oxygen import OxygenSystem
 from .params import Params
+from .power import PowerSystem
 from .runtime import Clock, Generation, Metrics, RuntimeContext
 from .settler import Settler
 from .slag import SlagTap
@@ -81,6 +82,7 @@ class Application:
         self.slag.bind_matte(self.matte)
         self.matte.bind_converter(self.conv)
         self.oxygen.bind_feed_port(self.conc)
+        self.power = PowerSystem(ctx)
         self.components: tuple[Component, ...] = (
             self.furnace,
             self.burner,
@@ -91,6 +93,7 @@ class Application:
             self.matte,
             self.conv,
             self.waste,
+            self.power,
         )
         self._by_name: dict[str, Component] = {component.name: component for component in self.components}
 
@@ -520,6 +523,82 @@ class Application:
                 expected_generation=params.optional_number("expected_generation"),
             )
 
+        @register("power.scan")
+        def _power_scan(params: Params) -> Mapping[str, Any]:
+            return self.power.scan(
+                params.text("actor", required=False, default="scada"),
+                grid_voltage=params.number("grid_voltage", minimum=0.0, maximum=1.5),
+                genset_fault=params.boolean("genset_fault", required=False, default=False),
+                correlation_id=params.optional_text("correlation_id"),
+            )
+
+        @register("power.register")
+        def _power_register(params: Params) -> Mapping[str, Any]:
+            return self.power.register_load(
+                params.text("actor", required=False, default="control-room"),
+                device_id=params.text("device_id"),
+                name=params.text("name"),
+                grade=params.text("grade"),
+                kw=params.number("kw", minimum=0.0),
+                sag_policy=params.text("sag_policy"),
+                source=params.text("source"),
+                sag_group=params.integer("sag_group", required=False, default=0, minimum=0, maximum=99),
+                restore_order=params.integer("restore_order", minimum=1, maximum=10000),
+                correlation_id=params.optional_text("correlation_id"),
+                expected_generation=params.optional_number("expected_generation"),
+            )
+
+        @register("power.cut")
+        def _power_cut(params: Params) -> Mapping[str, Any]:
+            return self.power.cut(
+                params.text("actor", required=False, default="control-room"),
+                device_id=params.text("device_id"),
+                reason=params.text("reason"),
+                correlation_id=params.optional_text("correlation_id"),
+                expected_generation=params.optional_number("expected_generation"),
+            )
+
+        @register("power.feed")
+        def _power_feed(params: Params) -> Mapping[str, Any]:
+            return self.power.feed(
+                params.text("actor", required=False, default="control-room"),
+                device_id=params.text("device_id"),
+                correlation_id=params.optional_text("correlation_id"),
+                expected_generation=params.optional_number("expected_generation"),
+            )
+
+        @register("power.restore_now")
+        def _power_restore_now(params: Params) -> Mapping[str, Any]:
+            return self.power.restore_now(
+                params.text("actor", required=False, default="control-room"),
+                correlation_id=params.optional_text("correlation_id"),
+            )
+
+        @register("power.genset_test")
+        def _power_genset_test(params: Params) -> Mapping[str, Any]:
+            return self.power.genset_test(
+                params.text("actor", required=False, default="control-room"),
+                correlation_id=params.optional_text("correlation_id"),
+                expected_generation=params.optional_number("expected_generation"),
+            )
+
+        @register("power.genset_test_end")
+        def _power_genset_test_end(params: Params) -> Mapping[str, Any]:
+            return self.power.genset_test_end(
+                params.text("actor", required=False, default="control-room"),
+                correlation_id=params.optional_text("correlation_id"),
+                expected_generation=params.optional_number("expected_generation"),
+            )
+
+        @register("power.reset")
+        def _power_reset(params: Params) -> Mapping[str, Any]:
+            return self.power.reset(
+                params.text("actor", required=False, default="control-room"),
+                note=params.text("note"),
+                correlation_id=params.optional_text("correlation_id"),
+                expected_generation=params.optional_number("expected_generation"),
+            )
+
         return actions
 
     # ------------------------------------------------------------- 对外接口
@@ -570,6 +649,16 @@ class Application:
             actor=actor,
         )
         return [event.to_dict() for event in events]
+
+    def power_ledger(
+        self,
+        *,
+        limit: int = 100,
+        incident_id: str | None = None,
+        device_id: str | None = None,
+        event: str | None = None,
+    ) -> list[Mapping[str, Any]]:
+        return self.power.ledger(limit=limit, incident_id=incident_id, device_id=device_id, event=event)
 
     def verify(self) -> Mapping[str, Any]:
         report = self.store.verify()

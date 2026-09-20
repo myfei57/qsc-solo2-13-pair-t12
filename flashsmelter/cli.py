@@ -151,6 +151,27 @@ def _cmd_verify(args: argparse.Namespace) -> int:
     return 0 if report.get("ok") else 2
 
 
+def _cmd_power(args: argparse.Namespace) -> int:
+    application = Application(_build_settings(args))
+    if getattr(args, "ledger", False):
+        events = application.power_ledger(
+            limit=args.limit,
+            incident_id=args.incident,
+            device_id=args.device,
+            event=args.event,
+        )
+        _print({"count": len(events), "events": events})
+        return 0
+    _print(
+        {
+            "status": dict(application.power.status()),
+            "genset": dict(application.power.genset_status()),
+            "grades": dict(application.power.grade_summary()),
+        }
+    )
+    return 0
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="flashsmelter",
@@ -194,6 +215,14 @@ def build_parser() -> argparse.ArgumentParser:
 
     verify = subparsers.add_parser("verify", help="校验落盘数据完整性")
     verify.set_defaults(func=_cmd_verify)
+
+    power = subparsers.add_parser("power", help="查看供电与保安电源状态/电源台账")
+    power.add_argument("--ledger", action="store_true", help="打印电源台账（每台设备停送电记录）")
+    power.add_argument("--limit", type=int, default=50)
+    power.add_argument("--incident", help="按事故号过滤，如 OUT-0001 / SAG-0001")
+    power.add_argument("--device", help="按设备编号过滤")
+    power.add_argument("--event", help="按事件类型过滤，如 load-shed / load-energized")
+    power.set_defaults(func=_cmd_power)
 
     return parser
 
